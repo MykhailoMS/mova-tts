@@ -21,18 +21,18 @@ model itself is public.
 from mova_tts import MovaTTS
 
 tts = MovaTTS()                                        # downloads the model on first use
-voice = tts.voice("me.wav", "Точний текст, який звучить у записі.")
+voice = tts.example_voice()                            # bundled voice (Common Voice, CC0)
 wav = tts.synthesize("Доброго дня! Сьогодні я розповім вам про нашу нову систему.", voice)
 tts.save(wav, "out.wav")
 ```
 
-Clone any voice from a clean 3–12 second recording plus the exact text spoken in it. Encode a
-voice once and reuse it with `voice.save("me.npz")` and `Voice.load("me.npz")`. There is an
-example voice from Common Voice (CC0) in `examples/`:
+To clone any voice, give a clean 3–12 second recording and the exact text spoken in it:
+`tts.voice("me.wav", "Точний текст, який звучить у записі.")`. Encode a voice once and reuse
+it with `voice.save("me.npz")` and `Voice.load("me.npz")`.
 
 ```bash
-mova-tts "Доброго дня! Як ваші справи?" --ref examples/voice_cv.wav \
-    --ref-text "$(cat examples/voice_cv.txt)" -o out.wav
+mova-tts "Доброго дня! Як ваші справи?" -o out.wav             # example voice
+mova-tts "Доброго дня!" --ref me.wav --ref-text "що сказано в me.wav" -o out.wav
 ```
 
 ## Streaming

@@ -9,9 +9,10 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog="mova-tts", description="Ukrainian text-to-speech with voice cloning")
     ap.add_argument("text", nargs="*", help="text to speak; read from stdin if omitted")
     ap.add_argument("-o", "--out", default="out.wav")
-    g = ap.add_mutually_exclusive_group(required=True)
+    g = ap.add_mutually_exclusive_group()
     g.add_argument("--ref", help="reference recording of the voice (3-12 s, clean)")
-    g.add_argument("--voice", help="a voice saved earlier with --save-voice (.npz)")
+    g.add_argument("--voice", help="a voice saved earlier with --save-voice (.npz); "
+                                   "without --ref and --voice the bundled example voice is used")
     ap.add_argument("--ref-text", help="exact text spoken in --ref")
     ap.add_argument("--save-voice", metavar="NPZ", help="save the encoded reference for reuse")
     ap.add_argument("--model", default=DEFAULT_MODEL)
@@ -32,7 +33,8 @@ def main(argv=None):
         print(tts.frontend.stressed(text))
         print(tts.frontend(text))
         return
-    voice = tts.voice(a.ref, a.ref_text) if a.ref else Voice.load(a.voice)
+    voice = (tts.voice(a.ref, a.ref_text) if a.ref else Voice.load(a.voice) if a.voice
+             else tts.example_voice())
     if a.save_voice:
         voice.save(a.save_voice)
     if a.stream:

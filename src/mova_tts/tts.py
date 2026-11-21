@@ -14,6 +14,12 @@ from typing import Iterator
 
 import numpy as np
 
+import warnings as _warnings
+
+# third-party deprecation noise at model load, nothing the user can act on
+_warnings.filterwarnings("ignore", message=r".*`local_dir_use_symlinks` argument is deprecated.*")
+_warnings.filterwarnings("ignore", message=r".*`resume_download` argument is deprecated.*")
+_warnings.filterwarnings("ignore", message=r".*`torch\.jit\.script` is deprecated.*")
 from .frontend import Frontend
 from .stream import HOP, STREAM_CFG, StreamDecoder
 
@@ -96,10 +102,20 @@ def trim_silence(wav: np.ndarray, sr: int = SR_IN, thr_db: float = -45.0, pad: f
     return wav[max(0, on[0] * hop - p): min(len(wav), (on[-1] + 1) * hop + p)]
 
 
+def example_voice_files() -> tuple[str, str]:
+    """(wav, transcript) paths of the bundled example voice (Common Voice, CC0)."""
+    d = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+    return os.path.join(d, "example_voice.wav"), os.path.join(d, "example_voice.txt")
+
+
 def _neuphonic(load, repo):
     """NeuCodec repos on HF are gated (approved at once, but you must accept the terms)."""
+    import warnings
     try:
-        return load(repo)
+        with warnings.catch_warnings():      # neucodec passes deprecated hf_hub_download args
+            warnings.filterwarnings("ignore", category=UserWarning, module="huggingface_hub")
+            warnings.filterwarnings("ignore", category=FutureWarning)
+            return load(repo)
     except Exception as e:
         if type(e).__name__ in ("GatedRepoError", "HTTPStatusError") or "401" in str(e) or "403" in str(e):
             raise RuntimeError(
@@ -150,6 +166,13 @@ class MovaTTS:
         else:
             self.backbone = Llama.from_pretrained(repo_id=model, filename=f"gguf/mova-tts-{quant}.gguf", **kw)
         self.backbone.last_n_tokens_size = N_CTX           # repeat-penalty window = whole sequence
+        # free llama.cpp while the interpreter is still alive: freed during teardown, it hits
+        # half-destroyed ctypes ("'NoneType' object is not callable") and the Metal backend
+        # then aborts the process (GGML_ASSERT in ggml_metal_device_free, exit code 134)
+        import atexit
+        import weakref
+        ref = weakref.ref(self)
+        atexit.register(lambda: ref() is not None and ref().close())
         torch_dev = {"cuda": "cuda", "metal": "mps"}.get(self.device, "cpu")
         self.frontend = Frontend(device=torch_dev, stress_model=stress_model, verbalize=verbalize,
                                  user_dict=user_dict)
@@ -185,12 +208,19 @@ class MovaTTS:
         """Make a voice from a clean recording (3-12 s) and the exact text spoken in it.
         Save it with voice.save("me.npz") and reuse it with Voice.load("me.npz")."""
         import torch
+        if not os.path.isfile(wav_path):
+            raise FileNotFoundError(f"no such recording: {wav_path!r} (or try tts.example_voice())")
         w = trim_silence(load_audio(wav_path))[: int(max_seconds * SR_IN)]
         codec = self._torch_codec()
         with torch.no_grad():
             x = torch.from_numpy(w)[None, None].to(next(codec.parameters()).device)
             codes = codec.encode_code(x).cpu().numpy()[0, 0].astype(np.int64)
         return Voice(codes, self.frontend(text), text)
+
+    def example_voice(self) -> Voice:
+        """A male voice from Common Voice (CC0), shipped with the package, for a first try."""
+        wav, txt = example_voice_files()
+        return self.voice(wav, open(txt, encoding="utf-8").read().strip())
 
     # ------------------------------------------------------------------ synthesis
     def _prompt(self, ipa: str, voice: Voice) -> str:
@@ -291,6 +321,19 @@ class MovaTTS:
         import soundfile as sf
         sf.write(path, wav, SR)
 
+    def close(self):
+        """Free the llama.cpp model (also done automatically at exit)."""
+        bb = getattr(self, "backbone", None)
+        if bb is not None and hasattr(bb, "close"):
+            bb.close()
+        self.backbone = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
 
 def _load_watermarker():
     try:
@@ -302,8 +345,9 @@ def _load_watermarker():
             shim = types.ModuleType("pkg_resources")
             shim.resource_filename = lambda p, r: str(importlib.resources.files(p) / r)
             sys.modules["pkg_resources"] = shim
-        import perth
-        return perth.PerthImplicitWatermarker()
+        # import the class directly: perth/__init__ swallows the ImportError and sets it to None
+        from perth.perth_net.perth_net_implicit.perth_watermarker import PerthImplicitWatermarker
+        return PerthImplicitWatermarker()
     except (ImportError, AttributeError, TypeError) as e:
         import warnings
         warnings.warn(f"Perth watermarking unavailable ({e}); audio is not watermarked.")
