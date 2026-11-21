@@ -183,3 +183,59 @@ def test_gated_codec_gives_a_clear_message():
         _neuphonic(load, "neuphonic/neucodec-onnx-decoder")
     with pytest.raises(ValueError):                    # other errors pass through unchanged
         _neuphonic(lambda r: (_ for _ in ()).throw(ValueError("x")), "neuphonic/neucodec")
+
+
+def test_example_voice_is_packaged():
+    import os
+    from mova_tts.tts import example_voice_files
+    wav, txt = example_voice_files()
+    assert os.path.getsize(wav) > 100_000 and "кримського" in open(txt, encoding="utf-8").read()
+
+
+def test_missing_recording_gives_a_clear_error():
+    import pytest
+    t = MovaTTS.__new__(MovaTTS)
+    with pytest.raises(FileNotFoundError, match="example_voice"):
+        t.voice("no-such.wav", "текст")
+
+
+def test_watermarker_loads():
+    from mova_tts.tts import _load_watermarker
+    assert _load_watermarker() is not None
+
+
+def test_wheel_contains_the_example_voice(tmp_path):
+    """hatchling honours .gitignore (*.wav): the bundled voice must still be in the wheel."""
+    import os
+    import subprocess
+    import sys
+    import zipfile
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    r = subprocess.run([sys.executable, "-m", "pip", "wheel", "--no-deps", "--no-build-isolation",
+                        "-w", str(tmp_path), root], capture_output=True, text=True)
+    if r.returncode:
+        import pytest
+        pytest.skip("cannot build a wheel here: " + r.stderr[-200:])
+    whl = next(p for p in os.listdir(tmp_path) if p.endswith(".whl"))
+    names = zipfile.ZipFile(tmp_path / whl).namelist()
+    assert "mova_tts/data/example_voice.wav" in names and "mova_tts/data/example_voice.txt" in names
+
+
+import pytest as _pytest
+
+
+@_pytest.mark.slow
+def test_clean_exit_after_synthesis_on_this_machine():
+    """llama.cpp must be freed before interpreter teardown: otherwise Metal aborts with exit
+    code 134 after a successful run. Runs a real (tiny) process; skipped without the model."""
+    import subprocess
+    import sys
+    import pytest
+    code = ("from mova_tts import MovaTTS\n"
+            "t = MovaTTS(watermark=False, verbalize=False)\n"
+            "t.synthesize('Так.', t.example_voice())\n")
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=900)
+    if "GatedRepoError" in r.stderr or "401" in r.stderr:
+        pytest.skip("no Hugging Face access to the model here")
+    assert r.returncode == 0, r.stderr[-800:]
+    assert "NoneType' object is not callable" not in r.stderr
