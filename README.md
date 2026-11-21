@@ -38,15 +38,65 @@ datasets (Apache-2.0). The scores are from 8 takes of 4 test sentences per voice
 already encoded, so it needs no recording. Hear samples on the
 [model page](https://huggingface.co/Mikhailo/mova-tts/tree/main/samples).
 
-To clone any voice, give a clean 3–12 second recording and the exact text spoken in it:
-`tts.voice("me.wav", "Точний текст, який звучить у записі.")`. Encode a voice once and reuse
-it with `voice.save("me.npz")` and `Voice.load("me.npz")`. Another ready voice to try cloning
+To clone any voice, see [Your own voice](#your-own-voice) below. Another voice to try cloning
 with is `tts.example_voice()`, a Common Voice recording (CC0) bundled as a wav.
 
 ```bash
 mova-tts "Доброго дня! Як ваші справи?" --preset mykyta -o out.wav
-mova-tts "Доброго дня!" --ref me.wav --ref-text "що сказано в me.wav" -o out.wav
 ```
+
+## Your own voice
+
+You need two things: a short recording of the voice and the exact text spoken in it.
+
+**1. Record 5–10 seconds.** One speaker, reading one or two ordinary sentences in the tone
+you want to hear back. The model copies the timbre, the pace, the mood and the room of the
+recording.
+
+- Pick a quiet room, with no music, no echo and no other voices. Keep the mic 15–30 cm away.
+- Read calmly and naturally. A cheerful or dialog-like reading carries over into everything
+  generated.
+- Any format works: wav, flac, ogg, mp3, or m4a from Voice Memos. Leading and trailing silence
+  is trimmed automatically, and anything past 12 s is cut off.
+
+**2. Write down exactly what you said**, word for word, including numbers as you said them.
+The model learns how the text maps to the sound from this pair. A wrong transcript gives
+slurred or skipped words.
+
+**3. Encode the voice once and save it:**
+
+```python
+from mova_tts import MovaTTS, Voice
+
+tts = MovaTTS()
+voice = tts.voice("me.m4a", "Учора ввечері я довго гуляв парком, бо погода була чудова.")
+voice.save("me.npz")                                # ~3 KB: codes + phonemes, no audio
+
+voice = Voice.load("me.npz")                        # later: no recording, no codec encoder
+tts.save(tts.synthesize("Будь-який текст моїм голосом.", voice), "out.wav")
+```
+
+From the command line:
+
+```bash
+mova-tts "Перевірка мого голосу." --ref me.m4a \
+    --ref-text "Учора ввечері я довго гуляв парком, бо погода була чудова." \
+    --save-voice me.npz -o test.wav
+mova-tts "Будь-який текст." --voice me.npz -o out.wav
+```
+
+**If it sounds off:**
+
+- Words get skipped or swallowed: check the transcript, and use a longer and clearer clip.
+- Noise or echo in the output: the reference has them, so re-record in a quieter spot.
+- Odd pauses or stretched words: that is an unlucky take. Generate again, or pass `seed=`.
+- The voice is not similar enough: try a different sentence. Usually one of 2–3 recordings
+  clones noticeably better.
+
+Encoding a recording downloads the NeuCodec encoder (`neuphonic/neucodec`, gated, see
+[install](#mova-tts)) the first time. A saved `.npz` voice is never encoded again.
+
+Clone only your own voice or a voice whose owner agreed to it.
 
 ## Streaming
 

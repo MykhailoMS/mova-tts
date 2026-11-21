@@ -78,9 +78,19 @@ def _auto_device() -> str:
 
 
 def load_audio(path: str, sr: int = SR_IN) -> np.ndarray:
+    """Any common audio file -> mono float32 at `sr`. wav/flac/ogg via soundfile; m4a/mp3/aac
+    (Voice Memos, phones) via librosa's audioread/ffmpeg fallback."""
     import soundfile as sf
     from scipy.signal import resample_poly
-    wav, r = sf.read(path, dtype="float32", always_2d=False)
+    try:
+        wav, r = sf.read(path, dtype="float32", always_2d=False)
+    except sf.LibsndfileError:
+        import librosa
+        try:
+            return librosa.load(path, sr=sr, mono=True)[0].astype(np.float32)
+        except Exception as e:
+            raise ValueError(f"cannot read {path!r} ({e}); convert it to wav, e.g. "
+                             f"ffmpeg -i {path} -ac 1 me.wav") from e
     if wav.ndim == 2:
         wav = wav.mean(1)
     if r != sr:

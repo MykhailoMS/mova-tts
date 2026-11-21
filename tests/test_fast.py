@@ -256,3 +256,22 @@ def test_unknown_preset_lists_the_available_ones():
     from mova_tts import preset
     with pytest.raises(ValueError, match="tetiana"):
         preset("nobody")
+
+
+def test_m4a_recording_loads(tmp_path):
+    """Voice Memos / phone recordings (m4a) are not readable by soundfile; the librosa
+    fallback must load them at 16 kHz with the same length as the wav."""
+    import shutil
+    import subprocess
+    import pytest
+    from mova_tts.tts import example_voice_files, load_audio
+    wav = example_voice_files()[0]
+    m4a = tmp_path / "me.m4a"
+    if shutil.which("afconvert"):
+        subprocess.run(["afconvert", "-f", "m4af", "-d", "aac", wav, str(m4a)], check=True)
+    elif shutil.which("ffmpeg"):
+        subprocess.run(["ffmpeg", "-v", "error", "-i", wav, str(m4a)], check=True)
+    else:
+        pytest.skip("no afconvert or ffmpeg to make an m4a")
+    a, b = load_audio(wav), load_audio(str(m4a))
+    assert abs(len(a) - len(b)) < 0.1 * 16000 and b.dtype == np.float32
