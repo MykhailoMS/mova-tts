@@ -8,7 +8,14 @@ than real time on a CPU.
 
 ```bash
 pip install mova-tts
+hf auth login        # once: the NeuCodec audio codec is a gated repo, see below
 ```
+
+The audio codec comes from Neuphonic's gated Hugging Face repos. Open
+[neuphonic/neucodec](https://huggingface.co/neuphonic/neucodec) and
+[neuphonic/neucodec-onnx-decoder](https://huggingface.co/neuphonic/neucodec-onnx-decoder) once,
+accept the terms (access is granted at once), and log in with `hf auth login`. The mova-tts
+model itself is public.
 
 ```python
 from mova_tts import MovaTTS

@@ -168,3 +168,18 @@ def test_early_stop_before_any_audio_is_retried_in_stream():
     bb = _FlakyBackbone(n=40)
     out = list(_tts(bb).stream("Текст.", Voice(np.array([1]), "r")))
     assert len(bb.seeds) == 2 and sum(len(c) for c in out) == 40 * HOP
+
+
+def test_gated_codec_gives_a_clear_message():
+    import pytest
+    from mova_tts.tts import _neuphonic
+
+    class GatedRepoError(Exception):
+        pass
+
+    def load(repo):
+        raise GatedRepoError("401 Client Error")
+    with pytest.raises(RuntimeError, match="hf auth login"):
+        _neuphonic(load, "neuphonic/neucodec-onnx-decoder")
+    with pytest.raises(ValueError):                    # other errors pass through unchanged
+        _neuphonic(lambda r: (_ for _ in ()).throw(ValueError("x")), "neuphonic/neucodec")
