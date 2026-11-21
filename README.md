@@ -18,20 +18,33 @@ accept the terms (access is granted at once), and log in with `hf auth login`. T
 model itself is public.
 
 ```python
-from mova_tts import MovaTTS
+from mova_tts import MovaTTS, preset, presets
 
 tts = MovaTTS()                                        # downloads the model on first use
-voice = tts.example_voice()                            # bundled voice (Common Voice, CC0)
-wav = tts.synthesize("Доброго дня! Сьогодні я розповім вам про нашу нову систему.", voice)
+print(presets())                                       # ['lada', 'mykyta', 'oleksa', 'tetiana']
+wav = tts.synthesize("Доброго дня! Сьогодні я розповім вам про нашу нову систему.", preset("tetiana"))
 tts.save(wav, "out.wav")
 ```
 
+| preset | voice | UTMOS | WER |
+|---|---|---:|---:|
+| `tetiana` (default) | female | 3.64 | 0.020 |
+| `mykyta` | male | 3.72 | 0.039 |
+| `oleksa` | male | 3.29 | 0.010 |
+| `lada` | female, noisier source recordings | 2.55 | 0.029 |
+
+The preset voices come from the [OpenTTS](https://huggingface.co/datasets/speech-uk/opentts-tetiana)
+datasets (Apache-2.0). The scores are from 8 takes of 4 test sentences per voice. A preset is
+already encoded, so it needs no recording. Hear samples on the
+[model page](https://huggingface.co/Mikhailo/mova-tts/tree/main/samples).
+
 To clone any voice, give a clean 3–12 second recording and the exact text spoken in it:
 `tts.voice("me.wav", "Точний текст, який звучить у записі.")`. Encode a voice once and reuse
-it with `voice.save("me.npz")` and `Voice.load("me.npz")`.
+it with `voice.save("me.npz")` and `Voice.load("me.npz")`. Another ready voice to try cloning
+with is `tts.example_voice()`, a Common Voice recording (CC0) bundled as a wav.
 
 ```bash
-mova-tts "Доброго дня! Як ваші справи?" -o out.wav             # example voice
+mova-tts "Доброго дня! Як ваші справи?" --preset mykyta -o out.wav
 mova-tts "Доброго дня!" --ref me.wav --ref-text "що сказано в me.wav" -o out.wav
 ```
 

@@ -8,3 +8,4 @@ build/
 *.wav
 !src/mova_tts/data/*.wav
 *.npz
+!src/mova_tts/data/voices/*.npz

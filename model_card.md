@@ -41,6 +41,24 @@ The [mova-tts](https://github.com/MykhailoMS/mova-tts) package does the Ukrainia
 front-end: numbers to words, stress with [naholos](https://github.com/MykhailoMS/naholos), and
 IPA. It also handles streaming decoding, with left context and a crossfade.
 
+## Preset voices
+
+`mova-tts` bundles four ready-made voices. They are taken from the OpenTTS datasets
+(Apache-2.0), and samples are in `samples/`:
+
+| preset | voice | UTMOS | WER | sample |
+|---|---|---:|---:|---|
+| `tetiana` (default) | female | 3.64 | 0.020 | [samples/tetiana.wav](samples/tetiana.wav) |
+| `mykyta` | male | 3.72 | 0.039 | [samples/mykyta.wav](samples/mykyta.wav) |
+| `oleksa` | male | 3.29 | 0.010 | [samples/oleksa.wav](samples/oleksa.wav) |
+| `lada` | female | 2.55 | 0.029 | [samples/lada.wav](samples/lada.wav) |
+
+```python
+from mova_tts import MovaTTS, preset
+tts = MovaTTS()
+tts.save(tts.synthesize("Доброго дня!", preset("mykyta")), "out.wav")
+```
+
 ## Files
 
 | file | for |

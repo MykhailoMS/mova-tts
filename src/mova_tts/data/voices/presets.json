@@ -1,0 +1,42 @@
+{
+ "lada": {
+  "clip": "lada_31502",
+  "text": "А не зриваю з ним, бо має гостре перо, ще готов пошкодити.",
+  "seconds": 4.16,
+  "wer": 0.029,
+  "utmos": 2.55,
+  "spk_sim": 0.68,
+  "source": "https://huggingface.co/datasets/speech-uk/opentts-lada",
+  "gender": "female"
+ },
+ "mykyta": {
+  "clip": "mykyta_54170",
+  "text": "Людина дужа і повна життя, як ви, не могла б цілий рік жити в палаці.",
+  "seconds": 6.24,
+  "wer": 0.039,
+  "utmos": 3.72,
+  "spk_sim": 0.69,
+  "source": "https://huggingface.co/datasets/speech-uk/opentts-mykyta",
+  "gender": "male"
+ },
+ "oleksa": {
+  "clip": "oleksa_74571",
+  "text": "- Не всякого чоловіка, Опанасе, - додав я.",
+  "seconds": 3.38,
+  "wer": 0.01,
+  "utmos": 3.29,
+  "spk_sim": 0.68,
+  "source": "https://huggingface.co/datasets/speech-uk/opentts-oleksa",
+  "gender": "male"
+ },
+ "tetiana": {
+  "clip": "tetiana_59899",
+  "text": "Д'Артаньян сидів, мов приголомшений страхітньою сповіддю Атоса.",
+  "seconds": 4.24,
+  "wer": 0.02,
+  "utmos": 3.64,
+  "spk_sim": 0.71,
+  "source": "https://huggingface.co/datasets/speech-uk/opentts-tetiana",
+  "gender": "female"
+ }
+}
