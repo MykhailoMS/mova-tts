@@ -1,8 +1,9 @@
-"""mova-tts "Текст" --ref me.wav --ref-text "що сказано в me.wav" -o out.wav"""
+"""mova-tts "Текст" --preset lada -o out.wav
+   mova-tts "Текст" --ref me.wav --ref-text "що сказано в me.wav" -o out.wav"""
 import argparse
 import sys
 
-from .tts import DEFAULT_MODEL, QUANTS, MovaTTS, Voice, timed_stream
+from .tts import DEFAULT_MODEL, DEFAULT_PRESET, QUANTS, MovaTTS, Voice, preset, presets, timed_stream
 
 
 def main(argv=None):
@@ -10,9 +11,10 @@ def main(argv=None):
     ap.add_argument("text", nargs="*", help="text to speak; read from stdin if omitted")
     ap.add_argument("-o", "--out", default="out.wav")
     g = ap.add_mutually_exclusive_group()
+    g.add_argument("--preset", help=f"a bundled voice: {', '.join(presets())} (default {DEFAULT_PRESET})")
     g.add_argument("--ref", help="reference recording of the voice (3-12 s, clean)")
-    g.add_argument("--voice", help="a voice saved earlier with --save-voice (.npz); "
-                                   "without --ref and --voice the bundled example voice is used")
+    g.add_argument("--voice", help="a voice saved earlier with --save-voice (.npz)")
+    ap.add_argument("--list-presets", action="store_true", help="print the bundled voices and exit")
     ap.add_argument("--ref-text", help="exact text spoken in --ref")
     ap.add_argument("--save-voice", metavar="NPZ", help="save the encoded reference for reuse")
     ap.add_argument("--model", default=DEFAULT_MODEL)
@@ -24,6 +26,9 @@ def main(argv=None):
     ap.add_argument("--stream", action="store_true", help="generate in streaming mode, print latency")
     ap.add_argument("--ipa", action="store_true", help="only print the stressed text and IPA")
     a = ap.parse_args(argv)
+    if a.list_presets:
+        print("\n".join(presets()))
+        return
     if a.ref and not a.ref_text:
         ap.error("--ref needs --ref-text (the exact words spoken in the recording)")
     text = " ".join(a.text) if a.text else sys.stdin.read()
@@ -33,8 +38,14 @@ def main(argv=None):
         print(tts.frontend.stressed(text))
         print(tts.frontend(text))
         return
-    voice = (tts.voice(a.ref, a.ref_text) if a.ref else Voice.load(a.voice) if a.voice
-             else tts.example_voice())
+    if a.ref:
+        voice = tts.voice(a.ref, a.ref_text)
+    elif a.voice:
+        voice = Voice.load(a.voice)
+    elif a.preset or presets():
+        voice = preset(a.preset or DEFAULT_PRESET)
+    else:
+        voice = tts.example_voice()
     if a.save_voice:
         voice.save(a.save_voice)
     if a.stream:

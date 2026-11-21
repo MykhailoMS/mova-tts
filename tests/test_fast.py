@@ -239,3 +239,20 @@ def test_clean_exit_after_synthesis_on_this_machine():
         pytest.skip("no Hugging Face access to the model here")
     assert r.returncode == 0, r.stderr[-800:]
     assert "NoneType' object is not callable" not in r.stderr
+
+
+def test_presets_are_bundled_and_valid():
+    from mova_tts import preset, presets
+    from mova_tts.tts import DEFAULT_PRESET
+    assert presets() == ["lada", "mykyta", "oleksa", "tetiana"] and DEFAULT_PRESET in presets()
+    for name in presets():
+        v = preset(name)
+        assert 150 <= len(v.codes) <= 600 and v.codes.max() < 65536 and v.ipa and v.text   # 3-12 s
+    assert preset().text == preset(DEFAULT_PRESET).text
+
+
+def test_unknown_preset_lists_the_available_ones():
+    import pytest
+    from mova_tts import preset
+    with pytest.raises(ValueError, match="tetiana"):
+        preset("nobody")

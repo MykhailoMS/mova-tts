@@ -1,0 +1,10 @@
+The preset voices in mova_tts/data/voices (tetiana, lada, mykyta, oleksa) are NeuCodec
+encodings of one utterance each from the Ukrainian OpenTTS datasets:
+
+  https://huggingface.co/datasets/speech-uk/opentts-tetiana
+  https://huggingface.co/datasets/speech-uk/opentts-lada
+  https://huggingface.co/datasets/speech-uk/opentts-mykyta
+  https://huggingface.co/datasets/speech-uk/opentts-oleksa
+
+Those datasets are released under the Apache License, Version 2.0 (see ../LICENSE).
+The clip ids and transcripts are listed in mova_tts/data/voices/presets.json.

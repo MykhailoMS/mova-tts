@@ -108,6 +108,26 @@ def example_voice_files() -> tuple[str, str]:
     return os.path.join(d, "example_voice.wav"), os.path.join(d, "example_voice.txt")
 
 
+_PRESET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "voices")
+DEFAULT_PRESET = "tetiana"          # the cleanest of the bundled voices (UTMOS 3.64)
+
+
+def presets() -> list[str]:
+    """Names of the bundled ready-made voices (already encoded: no recording, no codec encoder)."""
+    if not os.path.isdir(_PRESET_DIR):
+        return []
+    return sorted(f[:-4] for f in os.listdir(_PRESET_DIR) if f.endswith(".npz"))
+
+
+def preset(name: str = DEFAULT_PRESET) -> Voice:
+    """A bundled voice by name, see presets(). Voices from the OpenTTS datasets (Apache-2.0):
+    tetiana and lada (female), mykyta and oleksa (male)."""
+    p = os.path.join(_PRESET_DIR, f"{name}.npz")
+    if not os.path.isfile(p):
+        raise ValueError(f"unknown preset {name!r}; available: {', '.join(presets())}")
+    return Voice.load(p)
+
+
 def _neuphonic(load, repo):
     """NeuCodec repos on HF are gated (approved at once, but you must accept the terms)."""
     import warnings
