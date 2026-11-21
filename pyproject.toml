@@ -1,0 +1,62 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mova-tts"
+version = "0.1.0"
+description = "Ukrainian text-to-speech with voice cloning: a NeuTTS-Air fine-tune, streaming on CPU, Apple and NVIDIA GPUs"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "LICENSES/*"]
+requires-python = ">=3.10,<3.14"
+authors = [{ name = "Mykhailo Mulesa" }]
+keywords = ["ukrainian", "tts", "text-to-speech", "voice cloning", "neutts", "gguf", "speech"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Operating System :: OS Independent",
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Natural Language :: Ukrainian",
+  "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
+dependencies = [
+  "naholos>=0.1.0",
+  "llama-cpp-python>=0.3.16",
+  "neucodec>=0.0.4",
+  "torchao<0.18",          # neucodec -> torchtune 0.6 imports torchao.dtypes.nf4tensor (gone in 0.18)
+  "onnxruntime>=1.18",
+  "resemble-perth>=1.0.1",
+  "soundfile>=0.12",
+  "scipy>=1.10",
+  "numpy>=1.24",
+  "huggingface-hub>=0.23",
+  "ctranslate2>=4.0",
+  "sentencepiece>=0.2",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[project.scripts]
+mova-tts = "mova_tts.cli:main"
+
+[project.urls]
+Repository = "https://github.com/MykhailoMS/mova-tts"
+Issues = "https://github.com/MykhailoMS/mova-tts/issues"
+Model = "https://huggingface.co/Mikhailo/mova-tts"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mova_tts"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/mova_tts", "tests", "examples", "README.md", "LICENSE", "LICENSES", "pyproject.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: downloads the model (~0.8 GB) and synthesizes"]

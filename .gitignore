@@ -1,0 +1,10 @@
+.venv/
+models/
+*.egg-info/
+__pycache__/
+.pytest_cache/
+dist/
+build/
+*.wav
+!examples/*.wav
+*.npz
