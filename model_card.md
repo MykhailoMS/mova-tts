@@ -23,6 +23,7 @@ from IPA phonemes, and it clones a voice from a 3–12 second reference recordin
 
 ```bash
 pip install mova-tts
+hf auth login    # NeuCodec is gated: accept the terms on neuphonic/neucodec and neucodec-onnx-decoder once
 ```
 
 ```python

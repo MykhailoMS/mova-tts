@@ -96,6 +96,19 @@ def trim_silence(wav: np.ndarray, sr: int = SR_IN, thr_db: float = -45.0, pad: f
     return wav[max(0, on[0] * hop - p): min(len(wav), (on[-1] + 1) * hop + p)]
 
 
+def _neuphonic(load, repo):
+    """NeuCodec repos on HF are gated (approved at once, but you must accept the terms)."""
+    try:
+        return load(repo)
+    except Exception as e:
+        if type(e).__name__ in ("GatedRepoError", "HTTPStatusError") or "401" in str(e) or "403" in str(e):
+            raise RuntimeError(
+                f"{repo} is a gated Hugging Face repo. Once: open https://huggingface.co/{repo} and "
+                "https://huggingface.co/neuphonic/neucodec, accept the terms (approved at once), "
+                "then log in with `hf auth login`.") from e
+        raise
+
+
 class MovaTTS:
     """Ukrainian text-to-speech with voice cloning.
 
@@ -156,13 +169,13 @@ class MovaTTS:
                 return codec.decode_code(x)[0, 0].float().cpu().numpy()
             return dec
         from neucodec import NeuCodecOnnxDecoder         # CPU / Mac: ONNX decoder is faster
-        onnx = NeuCodecOnnxDecoder.from_pretrained("neuphonic/neucodec-onnx-decoder")
+        onnx = _neuphonic(NeuCodecOnnxDecoder.from_pretrained, "neuphonic/neucodec-onnx-decoder")
         return lambda c: onnx.decode_code(c.astype(np.int32)[None, None])[0, 0].astype(np.float32)
 
     def _torch_codec(self):
         if self._encoder is None:
             from neucodec import NeuCodec
-            self._encoder = NeuCodec.from_pretrained("neuphonic/neucodec").eval()
+            self._encoder = _neuphonic(NeuCodec.from_pretrained, "neuphonic/neucodec").eval()
             if self.device == "cuda":
                 self._encoder = self._encoder.to("cuda")
         return self._encoder
