@@ -72,8 +72,10 @@ tts = MovaTTS()
 voice = tts.voice("me.m4a", "Учора ввечері я довго гуляв парком, бо погода була чудова.")
 voice.save("me.npz")                                # ~3 KB: codes + phonemes, no audio
 
-voice = Voice.load("me.npz")                        # later: no recording, no codec encoder
+voice = Voice.load("me.npz")                        # later, in any script: no recording needed
 tts.save(tts.synthesize("Будь-який текст моїм голосом.", voice), "out.wav")
+for chunk in tts.stream("Або потоком, для живої розмови.", voice):
+    play(chunk)                                     # float32, 24 kHz mono
 ```
 
 From the command line:
