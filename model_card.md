@@ -17,7 +17,7 @@ tags:
 # mova-tts
 
 Ukrainian text-to-speech with voice cloning. This model is a **fine-tune of
-[neuphonic/neutts-air](https://huggingface.co/neuphonic/neutts-air)** on ~1780 hours of
+[neuphonic/neutts-air](https://huggingface.co/neuphonic/neutts-air)** on ~1460 hours of
 Ukrainian speech. It generates [NeuCodec](https://huggingface.co/neuphonic/neucodec) tokens
 from IPA phonemes, and it clones a voice from a 3–12 second reference recording.
 
@@ -49,9 +49,9 @@ IPA. It also handles streaming decoding, with left context and a crossfade.
 | preset | voice | UTMOS | WER | sample |
 |---|---|---:|---:|---|
 | `tetiana` (default) | female | 3.64 | 0.020 | [samples/tetiana.wav](samples/tetiana.wav) |
-| `mykyta` | male | 3.72 | 0.039 | [samples/mykyta.wav](samples/mykyta.wav) |
-| `oleksa` | male | 3.29 | 0.010 | [samples/oleksa.wav](samples/oleksa.wav) |
-| `lada` | female | 2.55 | 0.029 | [samples/lada.wav](samples/lada.wav) |
+| `mykyta` | male | 3.67 | 0.000 | [samples/mykyta.wav](samples/mykyta.wav) |
+| `oleksa` | male | 3.41 | 0.020 | [samples/oleksa.wav](samples/oleksa.wav) |
+| `lada` | female | 2.47 | 0.029 | [samples/lada.wav](samples/lada.wav) |
 
 ```python
 from mova_tts import MovaTTS, preset
@@ -79,11 +79,13 @@ that were never seen in training. Each speaker was cloned from a different sente
 
 | | WER | CER | UTMOS | speaker similarity |
 |---|---:|---:|---:|---:|
-| whole utterance, Q8_0 | 0.123–0.140 | 0.035–0.041 | 3.45 | 0.48–0.50 |
-| streaming, Q8_0 | 0.135–0.140 | 0.041–0.046 | 3.37 | 0.48–0.50 |
-| streaming, Q4_K_M | 0.131–0.135 | 0.041 | 3.33 | 0.48–0.49 |
+| whole utterance, Q8_0 | 0.114 | 0.032 | 3.53 | 0.49 |
+| streaming, Q8_0 | 0.119 | 0.033 | 3.44 | 0.49 |
+| streaming, Q4_K_M | 0.138 | 0.046 | 3.42 | 0.48 |
 
-Each row is the range over 3 sampling seeds (2 for Q4_K_M).
+Measured through the mova-tts package with one sampling seed; a single run varies by about
+±0.01 WER. The previous version (0.1) scored 0.123 / 0.136 / 0.131 WER and 3.46 / 3.37 / 3.33
+UTMOS on the same sentences and seed.
 
 WER and CER come from Whisper large-v3 transcripts. UTMOS is a predicted naturalness score from 1 to 5.
 Speaker similarity is the ECAPA cosine to the speaker's real recordings.
@@ -94,12 +96,12 @@ after 1.0 s on an i9-13900KF CPU with 8 threads (RTF 0.72).
 ## Training
 
 - **Base:** [neuphonic/neutts-air](https://huggingface.co/neuphonic/neutts-air), a 0.7B
-  Qwen-based speech LM (Apache-2.0). Full fine-tune in two stages: 12k steps on a 740-hour
-  subset, then 20k steps on all the data (LR 2e-5).
-- **Data:** ~1780 hours of Ukrainian speech: audiobooks read by professional narrators,
+  Qwen-based speech LM (Apache-2.0). Full fine-tune from the base, 30k steps, LR 4e-5.
+- **Data:** ~1460 hours of Ukrainian speech: audiobooks read by professional narrators,
   podcasts, Common Voice, and studio voice recordings. Leading and trailing silence was trimmed,
-  utterances with long internal pauses were dropped, and all audio was re-encoded with
-  NeuCodec. The training data is not released.
+  utterances with long internal pauses were dropped, every clip scoring below 2.5 UTMOS was
+  removed (~280 h), no single narrator has more than 20 hours, and all audio was re-encoded
+  with NeuCodec. The training data is not released.
 - **Text:** IPA from ipa-uk. The stress labels were taken from the audio itself: the text was
   aligned with the Montreal Forced Aligner, and an acoustic detector marked the stress the
   speaker actually used. The model therefore learned real spoken stress, not dictionary stress.

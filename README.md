@@ -1,7 +1,7 @@
 # mova-tts
 
 Ukrainian text-to-speech with voice cloning. The model is a fine-tune of
-[neuphonic/neutts-air](https://huggingface.co/neuphonic/neutts-air) on ~1780 hours of Ukrainian
+[neuphonic/neutts-air](https://huggingface.co/neuphonic/neutts-air) on ~1460 hours of Ukrainian
 speech. It runs through llama.cpp (GGUF) with the [NeuCodec](https://huggingface.co/neuphonic/neucodec)
 audio codec. It streams, with the first audio after 0.16 s on an RTX 4090, and it runs faster
 than real time on a CPU.
@@ -29,9 +29,9 @@ tts.save(wav, "out.wav")
 | preset | voice | UTMOS | WER |
 |---|---|---:|---:|
 | `tetiana` (default) | female | 3.64 | 0.020 |
-| `mykyta` | male | 3.72 | 0.039 |
-| `oleksa` | male | 3.29 | 0.010 |
-| `lada` | female, noisier source recordings | 2.55 | 0.029 |
+| `mykyta` | male | 3.67 | 0.000 |
+| `oleksa` | male | 3.41 | 0.020 |
+| `lada` | female, noisier source recordings | 2.47 | 0.029 |
 
 The preset voices come from the [OpenTTS](https://huggingface.co/datasets/speech-uk/opentts-tetiana)
 datasets (Apache-2.0). The scores are from 8 takes of 4 test sentences per voice. A preset is
@@ -127,14 +127,17 @@ CPU and on a Mac, the audio is decoded with the NeuCodec ONNX decoder. On the CP
 ## Quality
 
 The model was evaluated on 234 held-out sentences (Common Voice and audiobooks, speakers never
-seen in training), cloning each speaker from a different sentence of theirs. Each sentence is
-sampled, so every row gives the range over 3 seeds (2 for Q4_K_M):
+seen in training), cloning each speaker from a different sentence of theirs, through this
+package (GGUF, the same seed for every row):
 
 | | WER | CER | UTMOS | speaker similarity |
 |---|---:|---:|---:|---:|
-| `synthesize()`, Q8_0 | 0.123–0.140 | 0.035–0.041 | 3.45 | 0.48–0.50 |
-| `stream()`, Q8_0 | 0.135–0.140 | 0.041–0.046 | 3.37 | 0.48–0.50 |
-| `stream()`, Q4_K_M | 0.131–0.135 | 0.041 | 3.33 | 0.48–0.49 |
+| `synthesize()`, Q8_0 | 0.114 | 0.032 | 3.53 | 0.49 |
+| `stream()`, Q8_0 | 0.119 | 0.033 | 3.44 | 0.49 |
+| `stream()`, Q4_K_M | 0.138 | 0.046 | 3.42 | 0.48 |
+
+Version 0.1 of the model, on the same sentences and seed: 0.123 / 0.136 / 0.131 WER and
+3.46 / 3.37 / 3.33 UTMOS. Sampling makes a single run vary by about ±0.01 WER.
 
 WER and CER come from Whisper large-v3 transcripts of the generated audio. UTMOS is a
 predicted naturalness score from 1 to 5. Speaker similarity is the ECAPA cosine to the
@@ -173,12 +176,13 @@ a word or pauses oddly. If that happens, generate again or use another seed.
 ## Model and training
 
 - Base: [neuphonic/neutts-air](https://huggingface.co/neuphonic/neutts-air), a 0.7B Qwen-based
-  speech language model (Apache-2.0). It was fully fine-tuned in two stages: 12k steps on a
-  740-hour subset, then 20k steps on all the data.
-- Data: ~1780 hours of Ukrainian speech: audiobooks read by professional narrators, podcasts,
-  Common Voice, and studio voice recordings. All audio was re-encoded with NeuCodec. Stress
-  labels come from the recordings themselves: the text was aligned with the Montreal Forced
-  Aligner, and an acoustic detector marked the stress each speaker actually used.
+  speech language model (Apache-2.0), fully fine-tuned from the base for 30k steps.
+- Data: ~1460 hours of Ukrainian speech: audiobooks read by professional narrators, podcasts,
+  Common Voice, and studio voice recordings. Every clip was scored with UTMOS and those below
+  2.5 were dropped (~280 h), and no single narrator has more than 20 hours. All audio was
+  re-encoded with NeuCodec. Stress labels come from the recordings themselves: the text was
+  aligned with the Montreal Forced Aligner, and an acoustic detector marked the stress each
+  speaker actually used.
 - Weights: [Mikhailo/mova-tts](https://huggingface.co/Mikhailo/mova-tts) holds safetensors (for
   transformers) and GGUF Q8_0 and Q4_K_M files (for llama.cpp).
 
