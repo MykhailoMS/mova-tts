@@ -31,10 +31,12 @@ SR_IN = 16_000                   # NeuCodec encoder input
 N_CTX = 2048
 MAX_CODES_PER_CHAR = 8           # runaway guard, see MovaTTS._codes
 MIN_CODES_PER_CHAR = 1           # early-stop guard
-# Matched to the HF eval (HF generate() merges the checkpoint's generation_config: top_p 0.8,
-# repetition_penalty 1.1 over the whole sequence). llama-cpp-python defaults (top_p 0.95,
-# min_p 0.05, no penalty) gave WER 0.16-0.20 on held-out sentences, these 0.12.
-SAMPLING = dict(temperature=1.0, top_k=50, top_p=0.8, min_p=0.0, repeat_penalty=1.1)
+# top_p 0.8 as in the checkpoint's generation_config (llama-cpp-python defaults, top_p 0.95 and
+# min_p 0.05, gave clearly higher WER). repeat_penalty is off: on the v8 model it made some preset voices skip like a
+# scratched record (penalising the audio codes that naturally repeat on long vowels and pauses),
+# and on 234 held-out sentences it changed nothing measurable (Q8_0: WER 0.114 / UTMOS 3.53 with
+# 1.1, 0.114 / 3.51 with 1.0).
+SAMPLING = dict(temperature=1.0, top_k=50, top_p=0.8, min_p=0.0, repeat_penalty=1.0)
 _SPEECH = re.compile(r"<\|speech_(\d+)\|>")
 _END = "<|SPEECH_GENERATION_END|>"
 _SENT = re.compile(r"(?<=[.!?…])\s+")
