@@ -31,12 +31,12 @@ SR_IN = 16_000                   # NeuCodec encoder input
 N_CTX = 2048
 MAX_CODES_PER_CHAR = 8           # runaway guard, see MovaTTS._codes
 MIN_CODES_PER_CHAR = 1           # early-stop guard
-# Sampling = HF generate() with the checkpoint's generation_config, re-implemented on top of
-# llama.cpp logits (MovaTTS._codes / hf_sample). llama-cpp-python's own sampler, given the same
-# logits (BF16 GGUF vs HF: KL 1e-4), gave clearly worse speech on the v8 50k model (held-out WER
-# 0.16-0.17 vs 0.105) and its repeat_penalty cut sounds out of words; HF's penalty does not.
-SAMPLING = dict(temperature=1.0, top_k=50, top_p=0.8, repeat_penalty=1.1)
-MIN_NEW_TOKENS = 50              # as the HF eval: no end token for the first 50 codes (1 s)
+# top_p 0.8 as in the checkpoint's generation_config (llama-cpp-python defaults, top_p 0.95 and
+# min_p 0.05, gave clearly higher WER). repeat_penalty is off: on the v8 model it made some preset voices skip like a
+# scratched record (penalising the audio codes that naturally repeat on long vowels and pauses),
+# and on 234 held-out sentences it changed nothing measurable (Q8_0: WER 0.114 / UTMOS 3.53 with
+# 1.1, 0.114 / 3.51 with 1.0).
+SAMPLING = dict(temperature=1.0, top_k=50, top_p=0.8, min_p=0.0, repeat_penalty=1.0)
 _SPEECH = re.compile(r"<\|speech_(\d+)\|>")
 _END = "<|SPEECH_GENERATION_END|>"
 _SENT = re.compile(r"(?<=[.!?…])\s+")
@@ -56,34 +56,6 @@ class Voice:
     def load(cls, path: str) -> "Voice":
         z = np.load(path, allow_pickle=False)
         return cls(z["codes"].astype(np.int64), str(z["ipa"]), str(z["text"]))
-
-
-def hf_sample(logits: np.ndarray, rng: np.random.Generator, seen: np.ndarray, temperature=1.0,
-              top_k=50, top_p=0.8, repeat_penalty=1.0, banned=()) -> int:
-    """One next-token draw exactly as HF generate(): repetition penalty over every token seen so
-    far (prompt included; positive logits / p, negative * p) -> temperature -> top-k -> top-p
-    (drop the low tail whose cumulative mass is <= 1 - top_p, keep at least one)."""
-    x = logits.astype(np.float32, copy=True)
-    if repeat_penalty != 1.0 and len(seen):
-        v = x[seen]
-        x[seen] = np.where(v < 0, v * repeat_penalty, v / repeat_penalty)
-    for b in banned:
-        x[b] = -np.inf
-    if temperature != 1.0:
-        x /= temperature
-    k = min(top_k, len(x)) if top_k else len(x)
-    idx = np.argpartition(x, -k)[-k:]
-    v = x[idx]
-    order = np.argsort(v)                       # ascending, like HF's top-p warper
-    idx, v = idx[order], v[order]
-    p = np.exp(v - v.max())
-    p /= p.sum()
-    if top_p < 1.0:
-        keep = np.cumsum(p) > (1 - top_p)
-        keep[-1] = True
-        idx, p = idx[keep], p[keep]
-        p /= p.sum()
-    return int(idx[rng.choice(len(idx), p=p)])
 
 
 def _perf_cores() -> int:
@@ -225,7 +197,7 @@ class MovaTTS:
             self.backbone = Llama(model_path=os.path.join(model, "gguf", f"mova-tts-{quant}.gguf"), **kw)
         else:
             self.backbone = Llama.from_pretrained(repo_id=model, filename=f"gguf/mova-tts-{quant}.gguf", **kw)
-        self._tok_ids = None                               # speech0 / end token ids, lazy
+        self.backbone.last_n_tokens_size = N_CTX           # repeat-penalty window = whole sequence
         # free llama.cpp while the interpreter is still alive: freed during teardown, it hits
         # half-destroyed ctypes ("'NoneType' object is not callable") and the Metal backend
         # then aborts the process (GGML_ASSERT in ggml_metal_device_free, exit code 134)
@@ -288,55 +260,31 @@ class MovaTTS:
         return (f"user: Convert the text to speech:<|TEXT_PROMPT_START|>{voice.ipa} {ipa}"
                 f"<|TEXT_PROMPT_END|>\nassistant:<|SPEECH_GENERATION_START|>{codes}")
 
-    def _token_ids(self):
-        """(id of <|speech_0|>, id of the end token); the 65536 speech tokens are contiguous."""
-        if self._tok_ids is None:
-            t = lambda s: self.backbone.tokenize(s.encode(), add_bos=False, special=True)  # noqa: E731
-            s0, s_last, end = t("<|speech_0|>"), t("<|speech_65535|>"), t(_END)
-            if len(s0) != 1 or len(end) != 1 or s_last != [s0[0] + 65535]:
-                raise RuntimeError("unexpected GGUF vocabulary: speech tokens not found")
-            self._tok_ids = (s0[0], end[0])
-        return self._tok_ids
-
-    def _logits(self) -> np.ndarray:
-        import llama_cpp
-        p = llama_cpp.llama_get_logits_ith(self.backbone.ctx, -1)
-        return np.ctypeslib.as_array(p, shape=(self.backbone.n_vocab(),))
-
     def _codes(self, ipa: str, voice: Voice, seed: int, **sampling) -> Iterator[list[int]]:
-        """Stream generated codes (llama.cpp forward, HF-identical sampling, see hf_sample).
-        Afterwards self.last_ok is False if the take failed: it ran away (no stop by
-        MAX_CODES_PER_CHAR codes per IPA character; real speech needs at most 7.95 on 431
-        held-out sentences, median 3) and was cut, or it stopped too early (fewer than
-        MIN_CODES_PER_CHAR; real speech needs at least 2.1)."""
-        s = {**SAMPLING, **sampling}
-        s.pop("min_p", None)
-        speech0, end = self._token_ids()
-        toks = self.backbone.tokenize(self._prompt(ipa, voice).encode(), add_bos=False, special=True)
-        n = len(toks)
+        """Stream generated codes. Afterwards self.last_ok is False if the take failed:
+        it ran away (no stop by MAX_CODES_PER_CHAR codes per IPA character; real speech needs
+        at most 7.95 on 431 held-out sentences, median 3) and was cut, or it stopped too early
+        (fewer than MIN_CODES_PER_CHAR; real speech needs at least 2.1)."""
+        prompt = self._prompt(ipa, voice)
+        n = len(self.backbone.tokenize(prompt.encode(), add_bos=False, special=True))
         if n >= N_CTX - 50:
             raise ValueError("reference voice + text too long for the context: use a shorter "
                              "reference or shorter text")
         cap = min(N_CTX - n, MAX_CODES_PER_CHAR * len(ipa) + 50)
-        min_new = min(MIN_NEW_TOKENS, MIN_CODES_PER_CHAR * len(ipa))
-        rng = np.random.default_rng(seed)
-        seen = np.zeros(self.backbone.n_vocab(), bool)
-        seen[toks] = True
         self.backbone.reset()
-        self.backbone.eval(toks)
         self.last_ok, got = True, 0
-        while True:
-            t = hf_sample(self._logits(), rng, np.flatnonzero(seen), banned=(end,) if got < min_new else (), **s)
-            if t == end:
-                break
-            if speech0 <= t < speech0 + 65536:
-                got += 1
-                yield [t - speech0]
-            seen[t] = True
-            if got >= cap or self.backbone.n_tokens + 1 >= N_CTX:
+        for item in self.backbone(prompt, max_tokens=N_CTX - n, stop=[_END], stream=True,
+                                  seed=seed, **{**SAMPLING, **sampling}):
+            ids = _SPEECH.findall(item["choices"][0]["text"])
+            if ids:
+                ids = ids[:cap - got]
+                got += len(ids)
+                yield [int(i) for i in ids]
+            if got >= cap:
                 self.last_ok = False
                 return
-            self.backbone.eval([t])
+            if item["choices"][0].get("finish_reason") == "length":
+                self.last_ok = False
         if got < MIN_CODES_PER_CHAR * len(ipa):
             self.last_ok = False
 

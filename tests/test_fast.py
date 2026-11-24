@@ -94,72 +94,43 @@ def test_cuda_init_order(monkeypatch, tmp_path):
 
 
 class _Backbone:
-    """Fake llama.cpp (tokenize / reset / eval / logits): every take wants `n` speech codes
-    0..n-1, then the end token if `stops`. Records the seed of every take in .seeds."""
-    S0, END, V = 1000, 999, 70000
+    """Fake llama.cpp: streams `n` speech tokens, then the end token if `stops`."""
 
     def __init__(self, n, stops=True):
-        self.n, self.stops, self.seeds, self.got, self.n_tokens = n, stops, [], 0, 0
-
-    def want(self):
-        return self.n
+        self.n, self.stops, self.seeds = n, stops, []
 
     def tokenize(self, b, add_bos=False, special=True):
-        s = b.decode()
-        if s == "<|speech_0|>":
-            return [self.S0]
-        if s == "<|speech_65535|>":
-            return [self.S0 + 65535]
-        if s == "<|SPEECH_GENERATION_END|>":
-            return [self.END]
         return list(range(len(b) // 4))
 
-    def n_vocab(self):
-        return self.V
-
     def reset(self):
-        self.got, self.n_tokens = 0, 0
+        pass
 
-    def eval(self, toks):
-        self.n_tokens += len(toks)
-        self.got += sum(self.S0 <= t < self.S0 + 65536 for t in toks)
-
-    def logits(self):
-        x = np.zeros(self.V, np.float32)
-        if self.got < self.want() or not self.stops:
-            x[self.S0 + self.got % 65536] = 20       # the next code, by a wide margin
-            x[self.END] = 10
-        else:
-            x[self.END] = 20
-            x[self.S0 + self.got % 65536] = 10
-        return x
+    def __call__(self, prompt, max_tokens, stop, stream, seed, **kw):
+        self.seeds.append(seed)
+        for i in range(min(self.n, max_tokens)):
+            yield {"choices": [{"text": f"<|speech_{i}|>", "finish_reason": None}]}
+        if not self.stops:
+            yield {"choices": [{"text": "", "finish_reason": "length"}]}
 
 
-def _tts(backbone, ipa="ab"):
+def _tts(backbone):
     t = MovaTTS.__new__(MovaTTS)
-    t.backbone, t.seed, t.watermarker, t._tok_ids = backbone, 1, None, None
-    t.frontend = lambda text: ipa                           # 2 IPA chars -> cap 8 * 2 + 50 = 66
+    t.backbone, t.seed, t.watermarker = backbone, 1, None
+    t.frontend = lambda text: "ab"                          # 2 IPA chars -> cap 8 * 2 + 50 = 66
     t._decode = lambda c: np.ones(len(c) * HOP, np.float32)
-    t._logits = backbone.logits
-    orig = t._codes
-
-    def spy(ipa, voice, seed, **kw):
-        backbone.seeds.append(seed)
-        return orig(ipa, voice, seed, **kw)
-    t._codes = spy
     return t
 
 
 def test_runaway_take_is_cut_at_the_cap():
     t = _tts(_Backbone(n=1000, stops=False))
     codes = [c for cs in t._codes("ab", Voice(np.array([1]), "r"), seed=0) for c in cs]
-    assert len(codes) == 66 and codes[:3] == [0, 1, 2] and t.last_ok is False
+    assert len(codes) == 66 and t.last_ok is False
 
 
 def test_normal_take_is_not_cut():
     t = _tts(_Backbone(n=40))
     codes = [c for cs in t._codes("ab", Voice(np.array([1]), "r"), seed=0) for c in cs]
-    assert codes == list(range(40)) and t.last_ok is True
+    assert len(codes) == 40 and t.last_ok is True
 
 
 def test_synthesize_retries_a_runaway_with_a_new_seed():
@@ -178,45 +149,25 @@ def test_unknown_device_is_rejected():
 
 
 class _FlakyBackbone(_Backbone):
-    """The first take wants to stop after 1 code, later takes after n."""
+    """First take stops after 1 code (an early stop), later takes are normal."""
 
-    def want(self):
-        return 1 if len(self.seeds) == 1 else self.n
-
-
-def test_end_token_is_banned_for_the_first_codes():
-    """As the HF eval (min_new_tokens 50): a take cannot end before min(50, len(ipa)) codes."""
-    t = _tts(_FlakyBackbone(n=40), ipa="a" * 30)
-    codes = [c for cs in t._codes("a" * 30, Voice(np.array([1]), "r"), seed=0) for c in cs]
-    assert len(codes) == 30
+    def __call__(self, prompt, max_tokens, stop, stream, seed, **kw):
+        self.seeds.append(seed)
+        n = 1 if len(self.seeds) == 1 else self.n
+        for i in range(n):
+            yield {"choices": [{"text": f"<|speech_{i}|>", "finish_reason": None}]}
 
 
 def test_early_stop_is_retried_in_synthesize():
-    """Long text (60 IPA chars): the end is allowed after 50 codes but 60 are needed."""
-    bb = _FlakyBackbone(n=70)
-    wav = _tts(bb, ipa="a" * 60).synthesize("Текст.", Voice(np.array([1]), "r"))
-    assert len(bb.seeds) == 2 and len(wav) == 70 * HOP
+    bb = _FlakyBackbone(n=40)
+    wav = _tts(bb).synthesize("Текст.", Voice(np.array([1]), "r"))
+    assert len(bb.seeds) == 2 and len(wav) == 40 * HOP
 
 
-def test_hf_sample_matches_transformers():
-    """hf_sample draws from the same distribution as HF generate()'s processors."""
-    import torch
-    from transformers import (RepetitionPenaltyLogitsProcessor, TemperatureLogitsWarper,
-                              TopKLogitsWarper, TopPLogitsWarper)
-    from mova_tts.tts import hf_sample
-    g = np.random.default_rng(0)
-    logits = g.normal(0, 3, 400).astype(np.float32)
-    seen = np.array([3, 7, 50, 51, int(np.argmax(logits))])
-    x = torch.from_numpy(logits.copy())[None]
-    ids = torch.from_numpy(seen)[None]
-    for p in (RepetitionPenaltyLogitsProcessor(1.1), TemperatureLogitsWarper(0.9), TopKLogitsWarper(50),
-              TopPLogitsWarper(0.8)):
-        x = p(ids, x)
-    ref = torch.softmax(x, -1)[0].numpy()
-    n = 40000
-    counts = np.bincount([hf_sample(logits, g, seen, 0.9, 50, 0.8, 1.1) for _ in range(n)], minlength=400)
-    assert set(np.flatnonzero(counts)) <= set(np.flatnonzero(ref > 0))
-    assert np.abs(counts / n - ref).max() < 0.01
+def test_early_stop_before_any_audio_is_retried_in_stream():
+    bb = _FlakyBackbone(n=40)
+    out = list(_tts(bb).stream("Текст.", Voice(np.array([1]), "r")))
+    assert len(bb.seeds) == 2 and sum(len(c) for c in out) == 40 * HOP
 
 
 def test_gated_codec_gives_a_clear_message():
