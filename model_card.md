@@ -79,9 +79,9 @@ that were never seen in training. Each speaker was cloned from a different sente
 
 | | WER | CER | UTMOS | speaker similarity |
 |---|---:|---:|---:|---:|
-| whole utterance, Q8_0 | 0.114 | 0.032 | 3.53 | 0.49 |
-| streaming, Q8_0 | 0.119 | 0.033 | 3.44 | 0.49 |
-| streaming, Q4_K_M | 0.138 | 0.046 | 3.42 | 0.48 |
+| whole utterance, Q8_0 | 0.106 | 0.031 | 3.50 | 0.48 |
+| streaming, Q8_0 | 0.115 | 0.033 | 3.41 | 0.48 |
+| streaming, Q4_K_M | 0.118 | 0.035 | 3.42 | 0.49 |
 
 Measured through the mova-tts package with one sampling seed; a single run varies by about
 ±0.01 WER. The previous version (0.1) scored 0.123 / 0.136 / 0.131 WER and 3.46 / 3.37 / 3.33
@@ -90,13 +90,18 @@ UTMOS on the same sentences and seed.
 WER and CER come from Whisper large-v3 transcripts. UTMOS is a predicted naturalness score from 1 to 5.
 Speaker similarity is the ECAPA cosine to the speaker's real recordings.
 
-Speed (streaming, front-end included): first audio after 0.16 s on an RTX 4090 (RTF 0.14),
-after 1.0 s on an i9-13900KF CPU with 8 threads (RTF 0.72).
+Speed (streaming, front-end included): first audio after 0.11 s on an RTX 4090 (RTF 0.10),
+after 0.9 s on an i9-13900KF CPU with 8 threads (RTF 0.69).
+
+Sample with Hugging Face `generate()` settings (repetition penalty 1.1, top-k 50, top-p 0.8,
+temperature 1.0). The mova-tts package does this on top of llama.cpp logits; llama-cpp-python's
+built-in sampler gives clearly worse speech with this model.
 
 ## Training
 
 - **Base:** [neuphonic/neutts-air](https://huggingface.co/neuphonic/neutts-air), a 0.7B
-  Qwen-based speech LM (Apache-2.0). Full fine-tune from the base, 30k steps, LR 4e-5.
+  Qwen-based speech LM (Apache-2.0). Full fine-tune from the base: 30k steps (LR 4e-5), then
+  20k more (LR 1.5e-5) sampling every source without repeats.
 - **Data:** ~1460 hours of Ukrainian speech: audiobooks read by professional narrators,
   podcasts, Common Voice, and studio voice recordings. Leading and trailing silence was trimmed,
   utterances with long internal pauses were dropped, every clip scoring below 2.5 UTMOS was

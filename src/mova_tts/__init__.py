@@ -2,5 +2,5 @@
 from .frontend import Frontend
 from .tts import DEFAULT_MODEL, SR, MovaTTS, Voice, preset, presets
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 __all__ = ["MovaTTS", "Voice", "Frontend", "DEFAULT_MODEL", "SR", "preset", "presets"]
