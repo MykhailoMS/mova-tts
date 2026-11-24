@@ -79,19 +79,25 @@ that were never seen in training. Each speaker was cloned from a different sente
 
 | | WER | CER | UTMOS | speaker similarity |
 |---|---:|---:|---:|---:|
-| whole utterance, Q8_0 | 0.114 | 0.032 | 3.53 | 0.49 |
-| streaming, Q8_0 | 0.119 | 0.033 | 3.44 | 0.49 |
-| streaming, Q4_K_M | 0.138 | 0.046 | 3.42 | 0.48 |
+| whole utterance, Q8_0 | 0.107 | 0.028 | 3.52 | 0.49 |
+| streaming, Q8_0 | 0.117 | 0.030 | 3.45 | 0.49 |
+| streaming, Q4_K_M | 0.117 | 0.033 | 3.40 | 0.48 |
 
 Measured through the mova-tts package with one sampling seed; a single run varies by about
-±0.01 WER. The previous version (0.1) scored 0.123 / 0.136 / 0.131 WER and 3.46 / 3.37 / 3.33
-UTMOS on the same sentences and seed.
+±0.01 WER. The same weights sampled by llama.cpp without a repetition penalty (mova-tts 0.2.1)
+scored 0.114 / 0.141 / 0.140 WER; model version 0.1 scored 0.123 / 0.136 / 0.131 WER and
+3.46 / 3.37 / 3.33 UTMOS on the same sentences and seed.
 
 WER and CER come from Whisper large-v3 transcripts. UTMOS is a predicted naturalness score from 1 to 5.
 Speaker similarity is the ECAPA cosine to the speaker's real recordings.
 
-Speed (streaming, front-end included): first audio after 0.16 s on an RTX 4090 (RTF 0.14),
-after 1.0 s on an i9-13900KF CPU with 8 threads (RTF 0.72).
+Speed (streaming, front-end included): first audio after 0.11 s on an RTX 4090 (RTF 0.10),
+after 0.9 s on an i9-13900KF CPU with 8 threads (RTF 0.69).
+
+Sample with Hugging Face `generate()` settings (repetition penalty 1.1, top-k 50, top-p 0.8,
+temperature 1.0), and penalise the end token like the codes so a take does not stop before
+its last word. The mova-tts package does this on top of llama.cpp logits; llama-cpp-python's
+built-in sampler gives clearly worse speech with this model.
 
 ## Training
 
