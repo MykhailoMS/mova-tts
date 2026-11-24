@@ -3,7 +3,7 @@
 Ukrainian text-to-speech with voice cloning. The model is a fine-tune of
 [neuphonic/neutts-air](https://huggingface.co/neuphonic/neutts-air) on ~1460 hours of Ukrainian
 speech. It runs through llama.cpp (GGUF) with the [NeuCodec](https://huggingface.co/neuphonic/neucodec)
-audio codec. It streams, with the first audio after 0.11 s on an RTX 4090, and it runs faster
+audio codec. It streams, with the first audio after 0.16 s on an RTX 4090, and it runs faster
 than real time on a CPU.
 
 ```bash
@@ -117,8 +117,8 @@ by audio length). Median over 6 sentences, measured on one machine:
 
 | hardware | first audio | RTF |
 |---|---:|---:|
-| NVIDIA RTX 4090 (Q8_0 or Q4_K_M) | 0.11 s | 0.10 |
-| Intel i9-13900KF, CPU only, 8 threads (Q8_0 or Q4_K_M) | 0.9 s | 0.69 |
+| NVIDIA RTX 4090 (Q8_0 or Q4_K_M) | 0.16 s | 0.14 |
+| Intel i9-13900KF, CPU only, 8 threads (Q8_0 or Q4_K_M) | 1.0 s | 0.72 |
 
 `device="auto"` uses CUDA if it is available, then the Apple GPU (Metal), then the CPU. On the
 CPU and on a Mac, the audio is decoded with the NeuCodec ONNX decoder. On the CPU, set
@@ -132,19 +132,12 @@ package (GGUF, the same seed for every row):
 
 | | WER | CER | UTMOS | speaker similarity |
 |---|---:|---:|---:|---:|
-| `synthesize()`, Q8_0 | 0.106 | 0.031 | 3.50 | 0.48 |
-| `stream()`, Q8_0 | 0.115 | 0.033 | 3.41 | 0.48 |
-| `stream()`, Q4_K_M | 0.118 | 0.035 | 3.42 | 0.49 |
+| `synthesize()`, Q8_0 | 0.114 | 0.032 | 3.53 | 0.49 |
+| `stream()`, Q8_0 | 0.119 | 0.033 | 3.44 | 0.49 |
+| `stream()`, Q4_K_M | 0.138 | 0.046 | 3.42 | 0.48 |
 
-Version 0.2.1 (30k steps, llama.cpp's own sampler) on the same sentences and seed: 0.114 /
-0.141 / 0.140 WER. Version 0.1: 0.123 / 0.136 / 0.131. Sampling makes a single run vary by
-about ±0.01 WER.
-
-Sampling is done by the package, not by llama.cpp: llama.cpp only computes the logits, and
-the next code is drawn exactly as Hugging Face `generate()` does with the checkpoint's
-settings (repetition penalty 1.1, top-k 50, top-p 0.8, temperature 1.0). With the same logits,
-llama-cpp-python's built-in sampler gave held-out WER 0.16 on this model, and its repetition
-penalty cut short sounds out of words.
+Version 0.1 of the model, on the same sentences and seed: 0.123 / 0.136 / 0.131 WER and
+3.46 / 3.37 / 3.33 UTMOS. Sampling makes a single run vary by about ±0.01 WER.
 
 WER and CER come from Whisper large-v3 transcripts of the generated audio. UTMOS is a
 predicted naturalness score from 1 to 5. Speaker similarity is the ECAPA cosine to the
@@ -183,8 +176,7 @@ a word or pauses oddly. If that happens, generate again or use another seed.
 ## Model and training
 
 - Base: [neuphonic/neutts-air](https://huggingface.co/neuphonic/neutts-air), a 0.7B Qwen-based
-  speech language model (Apache-2.0), fully fine-tuned from the base: 30k steps, then 20k more
-  steps sampling every source without repeats.
+  speech language model (Apache-2.0), fully fine-tuned from the base for 30k steps.
 - Data: ~1460 hours of Ukrainian speech: audiobooks read by professional narrators, podcasts,
   Common Voice, and studio voice recordings. Every clip was scored with UTMOS and those below
   2.5 were dropped (~280 h), and no single narrator has more than 20 hours. All audio was
